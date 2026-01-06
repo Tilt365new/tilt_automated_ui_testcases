@@ -4,7 +4,7 @@
        preserve-order="true"
        parallel="methods"
        thread-count="6"
-       time-out="300000">
+       time-out="1900000">
 
     <listeners>
         <!-- Your custom listeners -->

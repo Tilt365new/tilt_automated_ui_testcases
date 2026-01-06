@@ -14,18 +14,15 @@ public class RetryAnalyzer implements IRetryAnalyzer {
      */
     private final int max;
 
-    /**
-     * Per-test counter (how many retries have already been scheduled for THIS test instance).
-     * First time retry() is called → count = 0.
-     */
-    private int count = 0;
-
     // Attribute keys for other listeners (TestListener, video recorder, etc.)
-    public static final String ATTR_RETRY_INDEX      = "retryIndex";       // 1..max (which retry is being scheduled)
+    public static final String ATTR_RETRY_INDEX      = "retryIndex";       // 1..max
     public static final String ATTR_MAX_RETRY        = "maxRetryCount";
-    public static final String ATTR_NEXT_RUN_NUMBER  = "nextRunNumber";    // 2..(max+1) (execution index)
+    public static final String ATTR_NEXT_RUN_NUMBER  = "nextRunNumber";    // 2..(max+1)
     public static final String ATTR_TOTAL_RUNS       = "totalRuns";        // max+1
     public static final String ATTR_RETRY_SCHEDULED  = "retryScheduled";   // true/false
+
+    // 🔒 NEW: internal per-test retry counter key
+    private static final String ATTR_RETRY_USED = "retryUsed";
 
     public RetryAnalyzer() {
         this.max = resolveMaxRetries();
@@ -33,7 +30,6 @@ public class RetryAnalyzer implements IRetryAnalyzer {
     }
 
     private int resolveMaxRetries() {
-        // Prefer -Dretry, but allow -Dretry.max as a fallback
         String raw = System.getProperty("retry",
                 System.getProperty("retry.max", "1"));
 
@@ -52,38 +48,38 @@ public class RetryAnalyzer implements IRetryAnalyzer {
 
     @Override
     public boolean retry(ITestResult result) {
-        int currentRetryCount = count; // how many retries already used for this test
 
-        if (currentRetryCount < max) {
-            // We ARE going to retry
-            count++;
+        // ✅ Per-test retry counter (thread-safe)
+        Integer used = (Integer) result.getAttribute(ATTR_RETRY_USED);
+        if (used == null) {
+            used = 0;
+        }
 
-            // retryIndex = 1,2,... (which retry we are scheduling)
-            int retryIndex = currentRetryCount + 1;
-            // total number of executions (first run + retries)
-            int totalPossibleRuns = max + 1;
-            // next run number (2..totalPossibleRuns)
-            int nextRunNumber = retryIndex + 1;
+        if (used < max) {
+            used++;
+            result.setAttribute(ATTR_RETRY_USED, used);
 
-            // Store metadata on this failure result (useful for reporting)
+            int retryIndex = used;           // 1..max
+            int totalRuns  = max + 1;        // first run + retries
+            int nextRun    = retryIndex + 1; // 2..(max+1)
+
+            // Preserve ALL your metadata
             result.setAttribute(ATTR_RETRY_INDEX, retryIndex);
             result.setAttribute(ATTR_MAX_RETRY, max);
-            result.setAttribute(ATTR_NEXT_RUN_NUMBER, nextRunNumber);
-            result.setAttribute(ATTR_TOTAL_RUNS, totalPossibleRuns);
+            result.setAttribute(ATTR_NEXT_RUN_NUMBER, nextRun);
+            result.setAttribute(ATTR_TOTAL_RUNS, totalRuns);
             result.setAttribute(ATTR_RETRY_SCHEDULED, Boolean.TRUE);
 
-            String attemptLabel = nextRunNumber + "/" + totalPossibleRuns; // “2/2”, “3/4”, etc.
-
-
             System.out.printf(
-                    "[RetryAnalyzer] Scheduling retry %d/%d → next run %s for test %s%n",
+                    "[RetryAnalyzer] Scheduling retry %d/%d → next run %d/%d for test %s%n",
                     retryIndex,
                     max,
-                    attemptLabel,
+                    nextRun,
+                    totalRuns,
                     result.getName()
             );
 
-            return true; // ✅ tell TestNG to schedule a retry
+            return true; // ✅ schedule retry
         }
 
         // No more retries
@@ -96,5 +92,4 @@ public class RetryAnalyzer implements IRetryAnalyzer {
         );
         return false;
     }
-
 }
