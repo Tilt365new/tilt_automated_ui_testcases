@@ -15,7 +15,7 @@ public class DashboardPage extends BasePage{
 
 
     // Example element to confirm dashboard is loaded
-    private By dashboardHeader = By.xpath("//header[@class='sc-742c83c9-0 bMxPLh']");
+    private By dashboardHeader = By.xpath("//h1[normalize-space()=\"Assessment\"]");
     private By userName = By.xpath("//div[@id='__next']//div//div//main//header//div//div//a");
     private By newAssessmentBtn = By.xpath("//button[normalize-space()='New Assessment']");
     private By individualsButton = By.xpath("//nav//button[normalize-space()='Individuals']");
