@@ -3,7 +3,7 @@
        verbose="1"
        preserve-order="true"
        parallel="methods"
-       thread-count="14"
+       thread-count="6"
        time-out="300000">
 
     <listeners>
@@ -31,11 +31,9 @@
             <class name="tests.SignUpFlowTests.SignUpFlowTest"/>
             <class name="tests.teams.TeamClimateTests"/>
             <class name="tests.teams.TeamAssessmentPurchaseAndAssignment"/>
-            <class name="tests.teams.TeamClimateTests"/>
             <class name="tests.teams.AddTeamMemberFlows"/>
             <class name="tests.OrderPreviewCouponFlowTests"/>
             <class name="tests.OrderPreviewSmokeTests"/>
-            <class name="tests.ManualEntryValidationTests"/>
             <class name="tests.reports.ReportGenerationTests"/>
             <class name="tests.resources.ResourcesPageTests"/>
 

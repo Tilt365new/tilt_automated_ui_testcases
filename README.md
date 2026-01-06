@@ -109,7 +109,9 @@ CI-like local run:
 
 - Fixed inboxes preferred in CI
 - Pool slots supported (`MAILSLURP_API_KEY_1..10`)
+- **On HTTP 421 (account-level throttling), invalidate the entire MailSlurp account by deleting all API keys and recreating a new pool of 10 keys**
 - Optional fallback to create inboxes (configurable)
+
 
 ---
 
