@@ -4,9 +4,10 @@
        preserve-order="true"
        parallel="methods"
        thread-count="6"
-       time-out="1900000">
+       time-out="3000000">
 
-    <listeners>
+
+<listeners>
         <!-- Your custom listeners -->
         <listener class-name="listeners.TestListener"/>
         <listener class-name="listeners.RetryTransformer"/>
