@@ -24,14 +24,18 @@
         <surefire.version>3.2.5</surefire.version>
 
         <!-- Allure -->
-        <allure.version>2.27.0</allure.version> <!--  centralize Allure version -->
-        <allure.results.directory>${project.build.directory}/allure-results</allure.results.directory> <!--  match TestListener -->
+        <allure.version>2.27.0</allure.version>
+        <allure.results.directory>${project.build.directory}/allure-results</allure.results.directory>
 
         <!-- Default knobs (override via CLI or Jenkins env) -->
         <timeout>20000</timeout>
         <headless>false</headless>
         <chrome.binary></chrome.binary>
         <wdm.browserVersion>142</wdm.browserVersion>
+
+        <!-- ✅ Default suite for LOCAL runs.
+             Jenkins/CLI can override with: -Dsurefire.suiteXmlFiles=testng-parallel.xml -->
+        <surefire.suiteXmlFiles>testng-smoke.xml</surefire.suiteXmlFiles>
     </properties>
 
     <!-- ========================================================= -->
@@ -39,6 +43,7 @@
     <!-- ========================================================= -->
     <build>
         <plugins>
+
             <!-- Java compiler -->
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
@@ -56,7 +61,10 @@
                 <version>3.5.0</version>
                 <executions>
                     <execution>
-                        <goals><goal>enforce</goal></goals>
+                        <id>enforce-java</id>
+                        <goals>
+                            <goal>enforce</goal>
+                        </goals>
                         <configuration>
                             <rules>
                                 <requireJavaVersion>
@@ -75,8 +83,10 @@
                 <artifactId>maven-surefire-plugin</artifactId>
                 <version>${surefire.version}</version>
                 <configuration>
+
+                    <!-- ✅ Use a property so Jenkins can override the suite file -->
                     <suiteXmlFiles>
-                        <suiteXmlFile>testng-smoke.xml</suiteXmlFile>
+                        <suiteXmlFile>${surefire.suiteXmlFiles}</suiteXmlFile>
                     </suiteXmlFiles>
 
                     <!-- Pass-through for local + Jenkins -->
@@ -99,14 +109,18 @@
                         <chrome.binary>${chrome.binary}</chrome.binary>
                         <wdm.browserVersion>${wdm.browserVersion}</wdm.browserVersion>
 
-                        <!--  Allure: make adapter + listeners agree on the same folder -->
+                        <!-- Allure: make adapter + listeners agree on the same folder -->
                         <allure.results.directory>${allure.results.directory}</allure.results.directory>
                     </systemPropertyVariables>
 
                     <reuseForks>true</reuseForks>
                     <forkCount>1</forkCount>
                     <failIfNoTests>true</failIfNoTests>
-                    <rerunFailingTestsCount>1</rerunFailingTestsCount>
+
+                    <!-- ✅ IMPORTANT FIX:
+                         Do NOT use Surefire rerunFailingTestsCount if you already use TestNG RetryAnalyzer (or -Dretry).
+                         This was inflating Allure to ~288 executions. -->
+                    <!-- <rerunFailingTestsCount>1</rerunFailingTestsCount> -->
                 </configuration>
             </plugin>
 
@@ -128,6 +142,7 @@
     <!-- DEPENDENCIES -->
     <!-- ========================================================= -->
     <dependencies>
+
         <!-- Selenium -->
         <dependency>
             <groupId>org.seleniumhq.selenium</groupId>
@@ -232,6 +247,7 @@
             <version>2.11.0</version>
         </dependency>
 
+        <!-- dotenv -->
         <dependency>
             <groupId>io.github.cdimascio</groupId>
             <artifactId>dotenv-java</artifactId>
