@@ -8,6 +8,7 @@ import com.mailslurp.models.InboxDto;
 
 import io.qameta.allure.Allure;
 
+import listeners.RetryAnalyzer;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -197,6 +198,11 @@ public class BaseTest {
     }
 
 
+
+    @BeforeSuite(alwaysRun = true)
+    public void resetRetryState() {
+        RetryAnalyzer.resetAll();
+    }
 
 
     // =====================================================================

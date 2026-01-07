@@ -7,8 +7,12 @@ import org.testng.internal.annotations.DisabledRetryAnalyzer;
 
 import java.lang.reflect.Constructor;
 import java.lang.reflect.Method;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 public class RetryTransformer implements IAnnotationTransformer {
+
+    // Avoid noisy logging (transform() is called a LOT)
+    private static final AtomicBoolean PRINTED_HEADER = new AtomicBoolean(false);
 
     @Override
     @SuppressWarnings("rawtypes")   // TestNG uses raw types here
@@ -19,18 +23,24 @@ public class RetryTransformer implements IAnnotationTransformer {
 
         final int retryMax = resolveRetryMax();
         final Class<? extends IRetryAnalyzer> existing = annotation.getRetryAnalyzerClass();
+
         final String methodName =
-                (testMethod != null ? testMethod.getDeclaringClass().getSimpleName() +
-                        "." + testMethod.getName() : "<no-method>");
+                (testMethod != null
+                        ? testMethod.getDeclaringClass().getSimpleName() + "." + testMethod.getName()
+                        : (testClass != null ? testClass.getSimpleName() + ".<unknown>" : "<no-method>"));
+
+        if (PRINTED_HEADER.compareAndSet(false, true)) {
+            System.out.println("[RetryTransformer] Loaded (retryMax=" + retryMax + ")");
+        }
 
         // --- Case 1: retries globally disabled --------------------------------
         if (retryMax <= 0) {
+            // If something else already set a custom analyzer, keep it.
             if (existing != null && existing != IRetryAnalyzer.class) {
                 System.out.println("[RetryTransformer] retry=0 → keeping existing analyzer "
                         + existing.getSimpleName() + " for " + methodName);
             } else {
-                System.out.println("[RetryTransformer] retry=0 → no retry analyzer for "
-                        + methodName);
+                System.out.println("[RetryTransformer] retry=0 → no retry analyzer for " + methodName);
             }
             return;
         }
@@ -58,18 +68,19 @@ public class RetryTransformer implements IAnnotationTransformer {
     }
 
     private int resolveRetryMax() {
-        String raw = System.getProperty("retry", "1");
+        // Keep backward compatibility: -Dretry.max also allowed
+        String raw = System.getProperty("retry",
+                System.getProperty("retry.max", "1"));
+
         try {
             int value = Integer.parseInt(raw.trim());
             if (value < 0) {
-                System.out.println("[RetryTransformer] Negative retry='" + raw +
-                        "', using 0 (no retries).");
+                System.out.println("[RetryTransformer] Negative retry='" + raw + "', using 0 (no retries).");
                 return 0;
             }
             return value;
         } catch (NumberFormatException e) {
-            System.out.println("[RetryTransformer] Invalid retry='" + raw +
-                    "', defaulting to 1");
+            System.out.println("[RetryTransformer] Invalid retry='" + raw + "', defaulting to 1");
             return 1;
         }
     }

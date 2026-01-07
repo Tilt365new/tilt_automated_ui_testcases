@@ -1,8 +1,13 @@
 package listeners;
 
-import io.qameta.allure.Allure;
 import org.testng.IRetryAnalyzer;
 import org.testng.ITestResult;
+
+import java.util.Arrays;
+import java.util.Objects;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ConcurrentMap;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 public class RetryAnalyzer implements IRetryAnalyzer {
 
@@ -21,12 +26,24 @@ public class RetryAnalyzer implements IRetryAnalyzer {
     public static final String ATTR_TOTAL_RUNS       = "totalRuns";        // max+1
     public static final String ATTR_RETRY_SCHEDULED  = "retryScheduled";   // true/false
 
-    // 🔒 NEW: internal per-test retry counter key
+    // 🔒 Legacy internal per-test retry counter key (kept for compatibility with any existing consumers)
     private static final String ATTR_RETRY_USED = "retryUsed";
+
+    /**
+     * ✅ FIX:
+     * TestNG may create a fresh ITestResult on retries, so result attributes can be lost.
+     * We persist retry counts in a static, thread-safe map keyed by the unique test invocation.
+     */
+    private static final ConcurrentMap<String, Integer> RETRY_USED_BY_KEY = new ConcurrentHashMap<>();
+
+    // Avoid spamming logs: TestNG may instantiate RetryAnalyzer per method
+    private static final AtomicBoolean PRINTED_CONFIG = new AtomicBoolean(false);
 
     public RetryAnalyzer() {
         this.max = resolveMaxRetries();
-        System.out.println("[RetryAnalyzer] Configured max retries = " + max);
+        if (PRINTED_CONFIG.compareAndSet(false, true)) {
+            System.out.println("[RetryAnalyzer] Configured max retries = " + max);
+        }
     }
 
     private int resolveMaxRetries() {
@@ -49,19 +66,21 @@ public class RetryAnalyzer implements IRetryAnalyzer {
     @Override
     public boolean retry(ITestResult result) {
 
-        // ✅ Per-test retry counter (thread-safe)
-        Integer used = (Integer) result.getAttribute(ATTR_RETRY_USED);
-        if (used == null) {
-            used = 0;
-        }
+        // ---- Build a stable key for the same test invocation across retries ----
+        // Qualified name + parameters is usually enough; include instance identity to avoid collisions
+        // when the same test method runs concurrently in different instances.
+        String key = buildKey(result);
 
-        if (used < max) {
-            used++;
-            result.setAttribute(ATTR_RETRY_USED, used);
+        // ✅ Persist retry count outside ITestResult (thread-safe)
+        int used = RETRY_USED_BY_KEY.merge(key, 1, Integer::sum); // 1..N
 
-            int retryIndex = used;           // 1..max
-            int totalRuns  = max + 1;        // first run + retries
-            int nextRun    = retryIndex + 1; // 2..(max+1)
+        // Keep the old attribute too (best-effort; useful for logs/compat)
+        result.setAttribute(ATTR_RETRY_USED, used);
+
+        if (used <= max) {
+            int retryIndex = used;            // 1..max
+            int totalRuns  = max + 1;         // first run + retries
+            int nextRun    = retryIndex + 1;  // 2..(max+1)
 
             // Preserve ALL your metadata
             result.setAttribute(ATTR_RETRY_INDEX, retryIndex);
@@ -90,6 +109,48 @@ public class RetryAnalyzer implements IRetryAnalyzer {
                 result.getName(),
                 max
         );
+
+        // Optional cleanup: once we're done retrying, drop the counter to avoid map growth.
+        // (Only safe when the test won't be invoked again with the same key in the same JVM.)
+        RETRY_USED_BY_KEY.remove(key);
+
         return false;
+    }
+
+    private static String buildKey(ITestResult result) {
+        String qName = result.getMethod().getQualifiedName(); // class + method
+        Object[] params = result.getParameters();
+
+        // Stable identity per test instance (important for parallel runs)
+        int instanceId = System.identityHashCode(result.getInstance());
+
+        return qName
+                + "|instance=" + instanceId
+                + "|params=" + Arrays.deepToString(params != null ? params : new Object[0]);
+    }
+
+    /**
+     * ✅ Helper for listeners/logs:
+     * attempt = 1 on first run, 2 on first retry, etc.
+     * This is more reliable than TestNG invocation counters.
+     */
+    public static int getAttemptNumber(ITestResult result) {
+        try {
+            String key = buildKey(result);
+            Integer used = RETRY_USED_BY_KEY.get(key); // increments only when a retry is scheduled
+            int retriesUsedSoFar = (used == null ? 0 : used);
+            return retriesUsedSoFar + 1;
+        } catch (Throwable ignored) {
+            return 1;
+        }
+    }
+
+    /**
+     * Optional helper if you want to clear between suites/runs.
+     * Call from @BeforeSuite / @AfterSuite if desired.
+     */
+    public static void resetAll() {
+        RETRY_USED_BY_KEY.clear();
+        PRINTED_CONFIG.set(false);
     }
 }
